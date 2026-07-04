@@ -6,7 +6,7 @@ export const reportCreateSchema = z
     raw_content: z.string().min(1).optional(),
     file_url: z.string().url().optional(),
     channel: z
-      .enum(["mobile", "web", "whatsapp", "api", "share_intent"])
+      .enum(["mobile", "web", "whatsapp", "telegram", "api", "extension", "share_intent"])
       .default("mobile"),
     language: z
       .enum(["en", "fr", "pidgin", "mixed", "unknown"])
@@ -92,6 +92,33 @@ export const publicAlertCreateSchema = z.object({
   related_campaign_id: z.string().uuid().optional(),
   severity: z.enum(["info", "warning", "critical"]),
 });
+
+export const apiKeyIssueSchema = z.object({
+  organization_name: z.string().min(1),
+  scopes: z.array(z.string()).default([]),
+  rate_limit_per_minute: z.number().int().min(1).max(10_000).optional(),
+});
+
+export const channelIdentityCreateSchema = z.object({
+  channel: z.enum(["whatsapp", "telegram"]),
+  external_id: z.string().min(1),
+});
+
+export const channelIdentityVerifySchema = z.object({
+  channel: z.enum(["whatsapp", "telegram"]),
+  external_id: z.string().min(1),
+  code: z.string().min(4).max(8),
+});
+
+export const publicAlertFromReportSchema = z
+  .object({
+    report_id: z.string().uuid().optional(),
+    campaign_id: z.string().uuid().optional(),
+  })
+  .refine((data) => !!data.report_id || !!data.campaign_id, {
+    message: "Provide either report_id or campaign_id.",
+    path: ["report_id"],
+  });
 
 export const safetyAlertCreateSchema = z.object({
   category: z.enum([

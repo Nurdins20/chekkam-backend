@@ -4,14 +4,15 @@ import { requireUser, requireRole, requireInstitutionMember } from "@/lib/auth";
 import { documentSignSchema } from "@/lib/validation/schemas";
 import { parseBody } from "@/lib/validation/parse";
 import { ValidationError, toErrorResponse } from "@/lib/errors";
-import { hashDocument, getInstitutionPrivateKey, signHash } from "@/lib/crypto/sign";
-import { generateVerificationId, generatePinCode } from "@/lib/crypto/ids";
-import { buildVerificationUrl, generateQrDataUrl } from "@/lib/crypto/qrcode";
+import { signDocumentCore } from "@/lib/documents/sign-document";
 
 /**
  * POST /api/documents/sign — institution officer signs a document.
  * SRS 6.4, 10.1. Requires multipart/form-data with fields:
  * file, institution_id, document_type, recipient_name?
+ *
+ * Thin wrapper over lib/documents/sign-document.ts — the shared logic also
+ * used by the WhatsApp/Telegram `SIGN` flow, so there is exactly one signing path.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -32,53 +33,16 @@ export async function POST(req: NextRequest) {
 
     await requireInstitutionMember(profile, parsed.institution_id);
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const fileHash = hashDocument(buffer);
-    const privateKey = getInstitutionPrivateKey(parsed.institution_id);
-    const signature = signHash(fileHash, privateKey);
-
-    const verificationId = generateVerificationId();
-    const pinCode = generatePinCode();
-    const qrPayload = buildVerificationUrl(verificationId);
-    const qrImage = await generateQrDataUrl(qrPayload);
-
     const admin = getSupabaseAdmin();
-    const { data, error } = await admin
-      .from("documents")
-      .insert({
-        institution_id: parsed.institution_id,
-        document_type: parsed.document_type,
-        recipient_name: parsed.recipient_name,
-        file_hash: fileHash,
-        signature,
-        verification_id: verificationId,
-        qr_payload: qrPayload,
-        pin_code: pinCode,
-      })
-      .select("id, verification_id, pin_code, qr_payload, status")
-      .single();
-
-    if (error) throw error;
-
-    await admin.from("audit_logs").insert({
-      actor_id: profile.id,
-      action: "document.sign",
-      target_table: "documents",
-      target_id: data.id,
-      metadata: { institution_id: parsed.institution_id, document_type: parsed.document_type },
+    const result = await signDocumentCore(admin, {
+      institutionId: parsed.institution_id,
+      documentType: parsed.document_type,
+      recipientName: parsed.recipient_name,
+      fileBuffer: Buffer.from(await file.arrayBuffer()),
+      actorId: profile.id,
     });
 
-    return NextResponse.json(
-      {
-        id: data.id,
-        verification_id: data.verification_id,
-        pin_code: data.pin_code,
-        qr_payload: data.qr_payload,
-        qr_image: qrImage,
-        status: data.status,
-      },
-      { status: 201 }
-    );
+    return NextResponse.json(result, { status: 201 });
   } catch (err) {
     return toErrorResponse(err);
   }
