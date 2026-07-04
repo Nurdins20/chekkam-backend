@@ -1,26 +1,45 @@
 @import "tailwindcss";
 
 :root {
+  /* Chekkam brand tokens — Chekkam_Brand_Guide.md Section 10-11 */
+  --chekkam-primary: #028090;
+  --chekkam-secondary: #00a896;
+  --chekkam-accent: #02c39a;
+  --chekkam-ink: #1e293b;
+  --chekkam-muted: #64748b;
+  --chekkam-tint: #e9f5f4;
+  --chekkam-tint-2: #f5faf9;
+
+  --status-success: #16a34a;
+  --status-warning: #f59e0b;
+  --status-danger: #dc2626;
+  --status-neutral: #64748b;
+
   --background: #ffffff;
-  --foreground: #171717;
+  --foreground: var(--chekkam-ink);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-chekkam-primary: var(--chekkam-primary);
+  --color-chekkam-secondary: var(--chekkam-secondary);
+  --color-chekkam-accent: var(--chekkam-accent);
+  --color-chekkam-ink: var(--chekkam-ink);
+  --color-chekkam-muted: var(--chekkam-muted);
+  --color-chekkam-tint: var(--chekkam-tint);
+  --color-chekkam-tint-2: var(--chekkam-tint-2);
+  --color-status-success: var(--status-success);
+  --color-status-warning: var(--status-warning);
+  --color-status-danger: var(--status-danger);
+  --color-status-neutral: var(--status-neutral);
+  --font-heading: var(--font-sora), "Poppins", sans-serif;
+  --font-body: var(--font-sans), sans-serif;
+  --radius-chekkam: 12px;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-body);
 }

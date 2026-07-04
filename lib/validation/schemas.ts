@@ -1,0 +1,112 @@
+import { z } from "zod";
+
+export const reportCreateSchema = z
+  .object({
+    content_type: z.enum(["text", "link", "image", "file"]),
+    raw_content: z.string().min(1).optional(),
+    file_url: z.string().url().optional(),
+    channel: z
+      .enum(["mobile", "web", "whatsapp", "api", "share_intent"])
+      .default("mobile"),
+    language: z
+      .enum(["en", "fr", "pidgin", "mixed", "unknown"])
+      .default("unknown"),
+    lat: z.number().min(-90).max(90).optional(),
+    lng: z.number().min(-180).max(180).optional(),
+  })
+  .refine(
+    (data) =>
+      data.content_type === "text" || data.content_type === "link"
+        ? !!data.raw_content
+        : true,
+    {
+      message: "raw_content is required for content_type=text or link",
+      path: ["raw_content"],
+    }
+  )
+  .refine(
+    (data) =>
+      data.content_type === "image" || data.content_type === "file"
+        ? !!data.file_url
+        : true,
+    { message: "file_url is required for content_type=image or file", path: ["file_url"] }
+  );
+
+export const reportUpdateSchema = z.object({
+  status: z.enum([
+    "pending",
+    "analyzed",
+    "under_review",
+    "verified_threat",
+    "false_report",
+    "dismissed",
+  ]),
+});
+
+export const documentSignSchema = z.object({
+  institution_id: z.string().uuid(),
+  document_type: z.string().min(1),
+  recipient_name: z.string().optional(),
+});
+
+export const documentRevokeSchema = z.object({
+  reason: z.string().min(1),
+});
+
+export const institutionCreateSchema = z.object({
+  name: z.string().min(1),
+  type: z.enum([
+    "ministry",
+    "exam_board",
+    "school",
+    "university",
+    "company",
+    "ngo",
+    "media",
+    "civil_registry",
+    "other",
+  ]),
+  contact_email: z.string().email().optional(),
+  contact_phone: z.string().optional(),
+});
+
+export const campaignUpdateSchema = z.object({
+  action: z.enum(["confirm", "merge", "split", "dismiss"]),
+  merged_into: z.string().uuid().optional(),
+});
+
+export const pushRegisterSchema = z.object({
+  fcm_token: z.string().min(1),
+  platform: z.enum(["android", "ios"]),
+});
+
+export const publicAlertCreateSchema = z.object({
+  title: z.string().min(1),
+  body: z.string().min(1),
+  alert_type: z.enum([
+    "scam_campaign",
+    "document_fraud",
+    "safety_incident",
+    "general_advisory",
+  ]),
+  related_campaign_id: z.string().uuid().optional(),
+  severity: z.enum(["info", "warning", "critical"]),
+});
+
+export const safetyAlertCreateSchema = z.object({
+  category: z.enum([
+    "violent_crime",
+    "accident",
+    "fire",
+    "natural_hazard",
+    "civil_unrest",
+    "missing_person",
+    "other",
+  ]),
+  description: z.string().min(1),
+  media_url: z.string().url().optional(),
+  lat: z.number().min(-90).max(90),
+  lng: z.number().min(-180).max(180),
+  location_precision: z.enum(["exact", "approximate"]).default("approximate"),
+  radius_meters: z.number().int().min(100).max(20000).default(1000),
+});
