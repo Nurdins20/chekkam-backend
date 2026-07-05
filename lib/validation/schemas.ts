@@ -120,6 +120,15 @@ export const publicAlertFromReportSchema = z
     path: ["report_id"],
   });
 
+export const publicAlertUpdateSchema = z.object({
+  title: z.string().min(1).optional(),
+  body: z.string().min(1).optional(),
+  alert_type: z
+    .enum(["scam_campaign", "document_fraud", "safety_incident", "general_advisory"])
+    .optional(),
+  severity: z.enum(["info", "warning", "critical"]).optional(),
+});
+
 export const safetyAlertCreateSchema = z.object({
   category: z.enum([
     "violent_crime",
