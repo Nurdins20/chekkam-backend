@@ -6,8 +6,9 @@ export type ParsedIntent =
   | { type: "check_message"; content: string };
 
 const VERIFICATION_ID_PATTERN = /CHK-[A-Z0-9]{4}-[A-Z0-9]{4}/i;
-const SIGN_PATTERN = /^sign\s+(.+)$/i;
-const REPORT_PATTERN = /^report\s+([\s\S]+)$/i;
+// Optional leading "/" so both WhatsApp's "SIGN ..." and Telegram's "/sign ..." match.
+const SIGN_PATTERN = /^\/?sign\s+(.+)$/i;
+const REPORT_PATTERN = /^\/?report\s+([\s\S]+)$/i;
 const HELP_PATTERN = /^(help|menu|\/start|\/help)$/i;
 
 /**
