@@ -53,6 +53,24 @@ export const documentRevokeSchema = z.object({
   reason: z.string().min(1),
 });
 
+export const institutionSignupSchema = z.object({
+  institution_name: z.string().min(1),
+  institution_type: z.enum([
+    "ministry",
+    "exam_board",
+    "school",
+    "university",
+    "company",
+    "ngo",
+    "media",
+    "civil_registry",
+    "other",
+  ]),
+  officer_name: z.string().min(1),
+  email: z.string().email(),
+  password: z.string().min(8),
+});
+
 export const institutionCreateSchema = z.object({
   name: z.string().min(1),
   type: z.enum([

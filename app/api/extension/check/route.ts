@@ -21,30 +21,13 @@ const extensionCheckSchema = z.object({
 const RATE_LIMIT = 30;
 const RATE_WINDOW_SECONDS = 10 * 60;
 
-function corsHeaders(origin: string | null): Record<string, string> {
-  const allowOrigin = origin && origin.startsWith("chrome-extension://") ? origin : "null";
-  return {
-    "Access-Control-Allow-Origin": allowOrigin,
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Max-Age": "86400",
-    Vary: "Origin",
-  };
-}
-
-/** CORS preflight for the extension's cross-origin POST. */
-export async function OPTIONS(req: NextRequest) {
-  return new NextResponse(null, { status: 204, headers: corsHeaders(req.headers.get("origin")) });
-}
-
 /**
  * POST /api/extension/check — free citizen-tier check for the browser
  * extension (Phase 2 spec P2-30). No API key; rate-limited by IP instead.
  * Reuses analyzeContent() — the same engine as every other channel.
+ * CORS (including OPTIONS preflight) is handled globally by proxy.ts.
  */
 export async function POST(req: NextRequest) {
-  const headers = corsHeaders(req.headers.get("origin"));
-
   try {
     const clientIp =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
@@ -60,7 +43,7 @@ export async function POST(req: NextRequest) {
             message: "Too many checks from this network. Please wait a bit and try again.",
           },
         },
-        { status: 429, headers }
+        { status: 429 }
       );
     }
 
@@ -116,22 +99,15 @@ export async function POST(req: NextRequest) {
       console.warn("[extension/check] report persistence skipped:", persistErr);
     }
 
-    return NextResponse.json(
-      {
-        risk_level: analysis.risk_level,
-        risk_score: analysis.risk_score,
-        category: analysis.category,
-        reasons: analysis.reasons,
-        recommended_action: analysis.recommended_action,
-        needs_human_review: true,
-      },
-      { headers }
-    );
+    return NextResponse.json({
+      risk_level: analysis.risk_level,
+      risk_score: analysis.risk_score,
+      category: analysis.category,
+      reasons: analysis.reasons,
+      recommended_action: analysis.recommended_action,
+      needs_human_review: true,
+    });
   } catch (err) {
-    const res = toErrorResponse(err);
-    for (const [key, value] of Object.entries(headers)) {
-      res.headers.set(key, value);
-    }
-    return res;
+    return toErrorResponse(err);
   }
 }

@@ -27,14 +27,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ alerts: data });
     }
 
-    const { data, error } = await admin
-      .from("public_alerts")
-      .select("id, title, body, alert_type, severity, published_at")
-      .eq("published", true)
-      .order("published_at", { ascending: false })
-      .limit(50);
-    if (error) throw error;
-    return NextResponse.json({ alerts: data });
+    try {
+      const { data, error } = await admin
+        .from("public_alerts")
+        .select("id, title, body, alert_type, severity, published_at")
+        .eq("published", true)
+        .order("published_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return NextResponse.json({ alerts: data });
+    } catch (err) {
+      // Citizen-facing: never 500 here — an unexpected DB hiccup should
+      // degrade to an empty list rather than break the app's alerts screen.
+      console.error("[public-alerts] falling back to an empty list:", err);
+      return NextResponse.json({ alerts: [] });
+    }
   } catch (err) {
     return toErrorResponse(err);
   }

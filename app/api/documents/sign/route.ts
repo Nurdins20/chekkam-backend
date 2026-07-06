@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { requireUser, requireRole, requireInstitutionMember } from "@/lib/auth";
 import { documentSignSchema } from "@/lib/validation/schemas";
 import { parseBody } from "@/lib/validation/parse";
-import { ValidationError, toErrorResponse } from "@/lib/errors";
+import { AuthError, ValidationError, toErrorResponse } from "@/lib/errors";
 import { signDocumentCore } from "@/lib/documents/sign-document";
 
 /**
@@ -34,6 +34,22 @@ export async function POST(req: NextRequest) {
     await requireInstitutionMember(profile, parsed.institution_id);
 
     const admin = getSupabaseAdmin();
+
+    // Signup security rule: a self-registered institution starts 'pending' and
+    // cannot sign until an admin activates it (and provisions its signing key).
+    const { data: institution, error: institutionError } = await admin
+      .from("institutions")
+      .select("status")
+      .eq("id", parsed.institution_id)
+      .single();
+    if (institutionError) throw institutionError;
+    if (institution.status !== "active") {
+      throw new AuthError(
+        "This institution has not been activated for signing yet. An admin must provision its signing key first.",
+        403
+      );
+    }
+
     const result = await signDocumentCore(admin, {
       institutionId: parsed.institution_id,
       documentType: parsed.document_type,
