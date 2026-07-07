@@ -55,9 +55,11 @@ export default function PublicAlertsAdminPage() {
     } finally {
       setLoading(false);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-mount
     load();
   }, [load]);
 
@@ -113,7 +115,10 @@ export default function PublicAlertsAdminPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-chekkam-ink">
+        <div className="text-xs font-semibold uppercase tracking-wider text-chekkam-primary">
+          Human approval gate
+        </div>
+        <h1 className="mt-1 font-[family-name:var(--font-heading)] text-2xl font-semibold text-chekkam-ink">
           Public alerts
         </h1>
         <p className="mt-1 text-sm text-chekkam-muted">
@@ -122,49 +127,49 @@ export default function PublicAlertsAdminPage() {
       </div>
 
       {error && <p className="text-sm text-status-danger">{error}</p>}
-      {loading && <p className="text-sm text-chekkam-muted">Loading...</p>}
+      {loading && <p className="text-sm text-chekkam-muted">Loading…</p>}
 
       <div className="flex flex-col gap-4">
         {alerts.map((alert) => (
           <div
             key={alert.id}
-            className={`rounded-chekkam border bg-white p-4 shadow-sm ${
-              alert.id === highlightId ? "border-chekkam-primary" : "border-black/5"
+            className={`rounded-[var(--radius-chekkam)] border bg-chekkam-surface-raised p-5 shadow-chekkam-sm ${
+              alert.id === highlightId ? "border-chekkam-primary ring-2 ring-chekkam-primary/15" : "border-chekkam-border"
             }`}
           >
-            <div className="mb-2 flex items-center gap-2">
+            <div className="mb-3 flex items-center gap-2">
               <span
-                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
+                className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
                   alert.published
-                    ? "bg-status-success/10 text-status-success"
-                    : "bg-status-neutral/10 text-status-neutral"
+                    ? "bg-status-success/12 text-status-success"
+                    : "bg-status-neutral/12 text-status-neutral"
                 }`}
               >
                 {alert.published ? "Published" : "Draft"}
               </span>
-              <span className="text-xs text-chekkam-muted">
+              <span className="text-xs text-chekkam-faint">
                 {alert.alert_type} · {alert.severity}
               </span>
             </div>
 
-            <label className="mb-2 block">
+            <label className="mb-3 block">
               <span className="text-xs font-medium text-chekkam-muted">Title</span>
               <input
                 value={field(alert, "title")}
                 onChange={(e) => setField(alert.id, "title", e.target.value)}
                 disabled={alert.published}
-                className="mt-1 w-full rounded-md border border-black/10 px-2 py-1 text-sm disabled:bg-chekkam-tint-2"
+                className="mt-1 w-full rounded-[var(--radius-chekkam-sm)] border border-chekkam-border bg-chekkam-tint px-3 py-2 text-sm text-chekkam-ink outline-none focus:border-chekkam-primary disabled:bg-chekkam-surface disabled:text-chekkam-muted"
               />
             </label>
 
-            <label className="mb-3 block">
+            <label className="mb-4 block">
               <span className="text-xs font-medium text-chekkam-muted">Body</span>
               <textarea
                 value={field(alert, "body")}
                 onChange={(e) => setField(alert.id, "body", e.target.value)}
                 disabled={alert.published}
                 rows={3}
-                className="mt-1 w-full rounded-md border border-black/10 px-2 py-1 text-sm disabled:bg-chekkam-tint-2"
+                className="mt-1 w-full rounded-[var(--radius-chekkam-sm)] border border-chekkam-border bg-chekkam-tint px-3 py-2 text-sm text-chekkam-ink outline-none focus:border-chekkam-primary disabled:bg-chekkam-surface disabled:text-chekkam-muted"
               />
             </label>
 
@@ -173,16 +178,16 @@ export default function PublicAlertsAdminPage() {
                 <button
                   onClick={() => saveEdits(alert)}
                   disabled={busyId === alert.id || !editing[alert.id]}
-                  className="rounded-md border border-chekkam-primary px-3 py-1 text-xs font-semibold text-chekkam-primary disabled:opacity-50"
+                  className="rounded-[var(--radius-chekkam-sm)] border border-chekkam-primary px-3.5 py-1.5 text-xs font-semibold text-chekkam-primary disabled:opacity-50"
                 >
                   Save changes
                 </button>
                 <button
                   onClick={() => publish(alert.id)}
                   disabled={busyId === alert.id}
-                  className="rounded-md bg-chekkam-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                  className="rounded-[var(--radius-chekkam-sm)] bg-gradient-lagoon px-3.5 py-1.5 text-xs font-semibold text-white shadow-chekkam-sm disabled:opacity-60"
                 >
-                  {busyId === alert.id ? "Publishing..." : "Publish"}
+                  {busyId === alert.id ? "Publishing…" : "Publish"}
                 </button>
               </div>
             )}

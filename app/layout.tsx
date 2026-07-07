@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
-import { Sora, Inter } from "next/font/google";
+import { Fraunces, Inter, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 
-const sora = Sora({ variable: "--font-sora", subsets: ["latin"] });
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  weight: ["400", "500", "600"],
+  style: ["normal", "italic"],
+});
 const inter = Inter({ variable: "--font-sans", subsets: ["latin"] });
+const plexMono = IBM_Plex_Mono({ variable: "--font-mono", subsets: ["latin"], weight: ["500"] });
 
 export const metadata: Metadata = {
   title: "Chekkam — One check. Total trust.",
@@ -16,7 +22,10 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${sora.variable} ${inter.variable} h-full antialiased`}>
+    <html
+      lang="en"
+      className={`${fraunces.variable} ${inter.variable} ${plexMono.variable} h-full antialiased`}
+    >
       <body className="min-h-full flex flex-col">{children}</body>
     </html>
   );

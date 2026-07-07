@@ -18,6 +18,7 @@ export function useSession(): SessionState {
 
   useEffect(() => {
     if (!supabase) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- no session to await when unconfigured
       setLoading(false);
       return;
     }

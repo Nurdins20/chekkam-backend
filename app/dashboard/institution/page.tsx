@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 type SignResult = {
@@ -11,6 +12,9 @@ type SignResult = {
   qr_image: string;
   status: string;
 };
+
+const inputClass =
+  "w-full rounded-[var(--radius-chekkam-sm)] border border-chekkam-border bg-chekkam-tint px-3.5 py-2.5 text-sm text-chekkam-ink outline-none transition focus:border-chekkam-primary focus:bg-chekkam-surface-raised focus:ring-2 focus:ring-chekkam-primary/20";
 
 /**
  * Institution officer document-signing screen (SRS FR-040, 6.4). This is the
@@ -70,17 +74,20 @@ export default function InstitutionDashboardPage() {
   return (
     <div className="mx-auto flex max-w-2xl flex-col gap-6">
       <div>
-        <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-chekkam-ink">
+        <div className="text-xs font-semibold uppercase tracking-wider text-chekkam-primary">
+          Institution officer
+        </div>
+        <h1 className="mt-1 font-[family-name:var(--font-heading)] text-2xl font-semibold text-chekkam-ink">
           Sign a document
         </h1>
         <p className="mt-1 text-sm text-chekkam-muted">
-          Requires your account to be a member of the institution (institution_members).
+          Requires your account to be a member of the institution.
         </p>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="flex flex-col gap-4 rounded-chekkam border border-black/5 bg-white p-6 shadow-sm"
+        className="flex flex-col gap-4 rounded-[var(--radius-chekkam)] border border-chekkam-border bg-chekkam-surface-raised p-7 shadow-chekkam-sm"
       >
         <Field label="Institution ID (uuid)">
           <input
@@ -88,7 +95,7 @@ export default function InstitutionDashboardPage() {
             value={institutionId}
             onChange={(e) => setInstitutionId(e.target.value)}
             placeholder="a1c2d3e4-...."
-            className="w-full rounded-md border border-black/10 px-3 py-2 text-sm focus:border-chekkam-primary focus:outline-none focus:ring-2 focus:ring-chekkam-primary/30"
+            className={`${inputClass} font-[family-name:var(--font-data)]`}
           />
         </Field>
 
@@ -97,7 +104,7 @@ export default function InstitutionDashboardPage() {
             required
             value={documentType}
             onChange={(e) => setDocumentType(e.target.value)}
-            className="w-full rounded-md border border-black/10 px-3 py-2 text-sm focus:border-chekkam-primary focus:outline-none focus:ring-2 focus:ring-chekkam-primary/30"
+            className={inputClass}
           />
         </Field>
 
@@ -105,7 +112,7 @@ export default function InstitutionDashboardPage() {
           <input
             value={recipientName}
             onChange={(e) => setRecipientName(e.target.value)}
-            className="w-full rounded-md border border-black/10 px-3 py-2 text-sm focus:border-chekkam-primary focus:outline-none focus:ring-2 focus:ring-chekkam-primary/30"
+            className={inputClass}
           />
         </Field>
 
@@ -114,7 +121,7 @@ export default function InstitutionDashboardPage() {
             required
             type="file"
             onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-            className="w-full text-sm"
+            className="w-full text-sm text-chekkam-muted file:mr-3 file:rounded-[var(--radius-chekkam-sm)] file:border-0 file:bg-chekkam-tint file:px-3 file:py-2 file:text-sm file:font-medium file:text-chekkam-ink"
           />
         </Field>
 
@@ -123,22 +130,31 @@ export default function InstitutionDashboardPage() {
         <button
           type="submit"
           disabled={loading}
-          className="rounded-md bg-chekkam-primary px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-60"
+          className="rounded-[var(--radius-chekkam-sm)] bg-gradient-lagoon px-4 py-2.5 text-sm font-semibold text-white shadow-chekkam-sm transition hover:brightness-110 disabled:opacity-60"
         >
-          {loading ? "Signing..." : "Sign document"}
+          {loading ? "Signing…" : "Sign document"}
         </button>
       </form>
 
       {result && (
-        <div className="flex flex-col items-start gap-4 rounded-chekkam border border-status-success/30 bg-status-success/10 p-6 sm:flex-row sm:items-center">
-          <img src={result.qr_image} alt="Verification QR code" className="h-40 w-40 rounded-md bg-white p-2" />
-          <dl className="text-sm text-chekkam-ink">
-            <dt className="font-semibold">Verification ID</dt>
-            <dd className="mb-2 font-mono">{result.verification_id}</dd>
-            <dt className="font-semibold">PIN</dt>
-            <dd className="mb-2 font-mono">{result.pin_code}</dd>
-            <dt className="font-semibold">Verify URL</dt>
-            <dd className="break-all font-mono text-xs">{result.qr_payload}</dd>
+        <div className="flex flex-col items-start gap-5 rounded-[var(--radius-chekkam)] bg-gradient-seal p-7 text-chekkam-lagoon shadow-chekkam-md sm:flex-row sm:items-center">
+          <Image
+            src={result.qr_image}
+            alt="Verification QR code"
+            width={144}
+            height={144}
+            unoptimized
+            className="h-36 w-36 rounded-[var(--radius-chekkam-sm)] bg-white p-2 shadow-chekkam-sm"
+          />
+          <dl className="text-sm">
+            <dt className="text-xs font-semibold uppercase tracking-wider opacity-70">Verification ID</dt>
+            <dd className="mb-3 font-[family-name:var(--font-data)] text-base font-medium">
+              {result.verification_id}
+            </dd>
+            <dt className="text-xs font-semibold uppercase tracking-wider opacity-70">PIN</dt>
+            <dd className="mb-3 font-[family-name:var(--font-data)] text-base font-medium">{result.pin_code}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wider opacity-70">Verify URL</dt>
+            <dd className="break-all font-[family-name:var(--font-data)] text-xs">{result.qr_payload}</dd>
           </dl>
         </div>
       )}
@@ -148,7 +164,7 @@ export default function InstitutionDashboardPage() {
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="flex flex-col gap-1">
+    <label className="flex flex-col gap-1.5">
       <span className="text-sm font-medium text-chekkam-ink">{label}</span>
       {children}
     </label>
