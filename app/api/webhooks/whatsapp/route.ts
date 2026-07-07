@@ -1,13 +1,8 @@
+import crypto from "node:crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase/admin";
-import { analyzeContent } from "@/lib/ai/risk-analysis";
-import { extractFingerprint } from "@/lib/campaigns/fingerprint";
-import {
-  matchCampaign,
-  findMatchingUnlinkedReport,
-  attachToCampaign,
-  createCampaignFromReports,
-} from "@/lib/campaigns/matcher";
+import { routeInboundMessage, InboundMessage } from "@/lib/channels/router";
+import { sendWhatsAppText, sendWhatsAppImage } from "@/lib/channels/send";
 
 /**
  * GET /api/webhooks/whatsapp — Meta's webhook verification handshake.
@@ -25,82 +20,106 @@ export async function GET(req: NextRequest) {
   return new NextResponse("Forbidden", { status: 403 });
 }
 
+type WhatsAppMediaObject = { id: string; mime_type?: string; caption?: string };
+type WhatsAppMessage = {
+  from: string;
+  id: string;
+  type: string;
+  text?: { body: string };
+  image?: WhatsAppMediaObject;
+  document?: WhatsAppMediaObject;
+};
 type WhatsAppWebhookPayload = {
   entry?: Array<{
-    changes?: Array<{
-      value?: {
-        messages?: Array<{ from?: string; text?: { body?: string } }>;
-      };
-    }>;
+    changes?: Array<{ value?: { messages?: WhatsAppMessage[] } }>;
   }>;
 };
 
+function isValidSignature(rawBody: string, signatureHeader: string | null, appSecret: string): boolean {
+  if (!signatureHeader?.startsWith("sha256=")) return false;
+  const expectedHex = signatureHeader.slice("sha256=".length);
+  const computedHex = crypto.createHmac("sha256", appSecret).update(rawBody, "utf8").digest("hex");
+  try {
+    return crypto.timingSafeEqual(Buffer.from(computedHex, "hex"), Buffer.from(expectedHex, "hex"));
+  } catch {
+    return false; // length mismatch etc. -> definitely invalid
+  }
+}
+
+function normalizeMessage(message: WhatsAppMessage): InboundMessage | null {
+  const media = message.image ?? message.document;
+  const text = message.text?.body ?? media?.caption;
+  const mediaRef = media?.id;
+  const mediaKind: "image" | "document" | undefined = message.image
+    ? "image"
+    : message.document
+      ? "document"
+      : undefined;
+
+  if (!text && !mediaRef) return null;
+
+  return { channel: "whatsapp", senderId: message.from, text, mediaRef, mediaKind };
+}
+
 /**
- * POST /api/webhooks/whatsapp — Phase 2 stub (SRS 6.6, 12.2 acceptance
- * criterion: "WhatsApp webhook reporting creates a reports row
- * indistinguishable in structure from an app-submitted report").
- * Text messages are turned into reports with channel: 'whatsapp' and run
- * through the same AI analysis + campaign matching as the mobile app.
- * TODO (Phase 2): send the analysis result back to the sender via the
- * WhatsApp Cloud API (WHATSAPP_CLOUD_API_TOKEN) once a business account is set up.
+ * POST /api/webhooks/whatsapp — WhatsApp Cloud API webhook (Phase 2 spec
+ * P2-10…P2-16). Validates X-Hub-Signature-256 against WHATSAPP_APP_SECRET
+ * (rejects unsigned requests once configured), normalizes each message into
+ * the shared InboundMessage shape, and delegates to routeInboundMessage —
+ * the exact same dispatcher Telegram uses (one engine, many doors).
  */
 export async function POST(req: NextRequest) {
-  const payload = (await req.json()) as WhatsAppWebhookPayload;
-  const admin = getSupabaseAdmin();
+  const rawBody = await req.text();
+  const appSecret = process.env.WHATSAPP_APP_SECRET;
 
-  const messages = payload.entry?.flatMap((e) => e.changes?.flatMap((c) => c.value?.messages ?? []) ?? []) ?? [];
+  if (appSecret) {
+    const signature = req.headers.get("x-hub-signature-256");
+    if (!isValidSignature(rawBody, signature, appSecret)) {
+      return new NextResponse("Forbidden", { status: 403 });
+    }
+  } else {
+    console.warn("[webhooks/whatsapp] WHATSAPP_APP_SECRET not set — skipping signature validation.");
+  }
+
+  let payload: WhatsAppWebhookPayload;
+  try {
+    payload = JSON.parse(rawBody);
+  } catch {
+    return NextResponse.json({ received: 0 });
+  }
+
+  const messages =
+    payload.entry?.flatMap((e) => e.changes?.flatMap((c) => c.value?.messages ?? []) ?? []) ?? [];
+  if (messages.length === 0) {
+    return NextResponse.json({ received: 0 });
+  }
+
+  let admin;
+  try {
+    admin = getSupabaseAdmin();
+  } catch (err) {
+    console.error("[webhooks/whatsapp] Supabase not configured; cannot process messages:", err);
+    return NextResponse.json({ received: 0 });
+  }
 
   for (const message of messages) {
-    const text = message.text?.body;
-    if (!text) continue;
+    try {
+      const inbound = normalizeMessage(message);
+      if (!inbound) continue;
 
-    const { data: inserted } = await admin
-      .from("reports")
-      .insert({
-        channel: "whatsapp",
-        content_type: "text",
-        raw_content: text,
-        status: "pending",
-      })
-      .select("id")
-      .single();
-
-    if (!inserted) continue;
-    const reportId = inserted.id as string;
-
-    const analysis = await analyzeContent(text);
-    const fingerprint = extractFingerprint(text);
-
-    let campaignId = await matchCampaign(admin, fingerprint);
-    if (campaignId) {
-      await attachToCampaign(admin, campaignId, reportId);
-    } else {
-      const matchingReportId = await findMatchingUnlinkedReport(admin, fingerprint, reportId);
-      if (matchingReportId) {
-        campaignId = await createCampaignFromReports(
-          admin,
-          [matchingReportId, reportId],
-          fingerprint,
-          analysis.category,
-          analysis.risk_level
-        );
+      const reply = await routeInboundMessage(admin, inbound);
+      if (reply.imageBuffer) {
+        await sendWhatsAppImage(message.from, reply.imageBuffer, reply.text);
+      } else {
+        await sendWhatsAppText(message.from, reply.text);
       }
+    } catch (err) {
+      console.error("[webhooks/whatsapp] failed to process message:", err);
+      await sendWhatsAppText(
+        message.from,
+        "Sorry, something went wrong processing that. Please try again in a moment."
+      ).catch(() => undefined);
     }
-
-    await admin
-      .from("reports")
-      .update({
-        status: "analyzed",
-        risk_level: analysis.risk_level,
-        risk_score: analysis.risk_score,
-        category: analysis.category,
-        ai_reasons: analysis.reasons,
-        ai_indicators: { ...analysis.indicators, fingerprint, source: analysis.source },
-        recommended_action: analysis.recommended_action,
-        needs_human_review: true,
-        confidence: analysis.confidence,
-      })
-      .eq("id", reportId);
   }
 
   return NextResponse.json({ received: messages.length });

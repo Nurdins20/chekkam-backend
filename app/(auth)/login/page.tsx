@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 export default function LoginPage() {
@@ -76,6 +77,10 @@ export default function LoginPage() {
         >
           {loading ? "Signing in..." : "Sign in"}
         </button>
+
+        <Link href="/signup" className="mt-4 block text-center text-sm text-chekkam-muted">
+          Register your institution
+        </Link>
       </form>
     </div>
   );

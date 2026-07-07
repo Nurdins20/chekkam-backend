@@ -128,9 +128,11 @@ export async function GET(req: NextRequest) {
     const status = searchParams.get("status");
     const riskLevel = searchParams.get("risk_level");
     const category = searchParams.get("category");
+    const channel = searchParams.get("channel");
     if (status) query = query.eq("status", status);
     if (riskLevel) query = query.eq("risk_level", riskLevel);
     if (category) query = query.eq("category", category);
+    if (channel) query = query.eq("channel", channel);
 
     const { data, error } = await query;
     if (error) throw error;
