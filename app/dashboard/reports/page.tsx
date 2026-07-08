@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 type Report = {
@@ -34,14 +33,17 @@ const CHANNEL_OPTIONS = ["mobile", "web", "whatsapp", "telegram", "api", "extens
 const RISK_OPTIONS = ["low", "medium", "high", "critical"];
 
 const RISK_COLOR: Record<string, string> = {
-  low: "bg-status-success/10 text-status-success",
-  medium: "bg-status-warning/10 text-status-warning",
-  high: "bg-status-danger/10 text-status-danger",
-  critical: "bg-status-danger/10 text-status-danger",
+  low: "bg-status-success/12 text-status-success",
+  medium: "bg-status-warning/12 text-status-warning",
+  high: "bg-status-danger/12 text-status-danger",
+  critical: "bg-status-danger/12 text-status-danger",
 };
 
+const selectClass =
+  "rounded-[var(--radius-chekkam-sm)] border border-chekkam-border bg-chekkam-tint px-2.5 py-1.5 text-xs text-chekkam-ink outline-none focus:border-chekkam-primary";
+
 /** Analyst review queue (SRS FR-081-083; Phase 2 §7.1-7.2). Human review before publish, in one screen. */
-export default function AnalystDashboardPage() {
+export default function ReportsDashboardPage() {
   const supabase = getSupabaseBrowser();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -77,8 +79,18 @@ export default function AnalystDashboardPage() {
   }, [supabase, filters]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-mount/filter-change
     loadReports();
   }, [loadReports]);
+
+  const stats = useMemo(() => {
+    const today = new Date().toDateString();
+    const todayCount = reports.filter((r) => new Date(r.created_at).toDateString() === today).length;
+    const pending = reports.filter((r) => ["pending", "analyzed", "under_review"].includes(r.status));
+    const highRisk = pending.filter((r) => r.risk_level === "high" || r.risk_level === "critical").length;
+    const campaigns = new Set(reports.map((r) => r.campaign_id).filter(Boolean)).size;
+    return { todayCount, pendingCount: pending.length, highRisk, campaigns };
+  }, [reports]);
 
   async function authHeaders() {
     const {
@@ -111,7 +123,7 @@ export default function AnalystDashboardPage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? "Failed to promote this report.");
-      window.location.href = `/dashboard/analyst/alerts?highlight=${body.id}`;
+      window.location.href = `/dashboard/alerts?highlight=${body.id}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -120,34 +132,29 @@ export default function AnalystDashboardPage() {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-chekkam-ink">
-            Report review queue
-          </h1>
-          <p className="mt-1 text-sm text-chekkam-muted">
-            Every AI result here is advisory (needs_human_review) until you set a final status.
-          </p>
-        </div>
-        <div className="flex gap-3 text-sm">
-          <Link href="/dashboard/analyst/alerts" className="font-medium text-chekkam-primary hover:underline">
-            Public alerts →
-          </Link>
-          <Link
-            href="/dashboard/analyst/safety-alerts"
-            className="font-medium text-chekkam-primary hover:underline"
-          >
-            Safety alerts →
-          </Link>
-        </div>
+    <div className="mx-auto flex max-w-5xl flex-col gap-7">
+      <div>
+        <div className="text-xs font-semibold uppercase tracking-wider text-chekkam-primary">Overview</div>
+        <h1 className="mt-1 font-[family-name:var(--font-heading)] text-2xl font-semibold text-chekkam-ink">
+          Report review queue
+        </h1>
+        <p className="mt-1 text-sm text-chekkam-muted">
+          Every AI result here is advisory until you set a final status — nothing publishes on its own.
+        </p>
       </div>
 
-      <div className="flex flex-wrap gap-2 rounded-chekkam border border-black/5 bg-white p-3 shadow-sm">
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <StatTile label="Reports loaded today" value={stats.todayCount} />
+        <StatTile label="Pending review" value={stats.pendingCount} accent={stats.pendingCount > 0} />
+        <StatTile label="High/critical open" value={stats.highRisk} danger={stats.highRisk > 0} />
+        <StatTile label="Linked campaigns" value={stats.campaigns} />
+      </div>
+
+      <div className="flex flex-wrap gap-2 rounded-[var(--radius-chekkam)] border border-chekkam-border bg-chekkam-surface-raised p-3 shadow-chekkam-sm">
         <select
           value={filters.status}
           onChange={(e) => setFilters((f) => ({ ...f, status: e.target.value }))}
-          className="rounded-md border border-black/10 px-2 py-1 text-xs"
+          className={selectClass}
         >
           <option value="">All statuses</option>
           {STATUS_OPTIONS.map((s) => (
@@ -159,7 +166,7 @@ export default function AnalystDashboardPage() {
         <select
           value={filters.channel}
           onChange={(e) => setFilters((f) => ({ ...f, channel: e.target.value }))}
-          className="rounded-md border border-black/10 px-2 py-1 text-xs"
+          className={selectClass}
         >
           <option value="">All channels</option>
           {CHANNEL_OPTIONS.map((c) => (
@@ -171,7 +178,7 @@ export default function AnalystDashboardPage() {
         <select
           value={filters.risk_level}
           onChange={(e) => setFilters((f) => ({ ...f, risk_level: e.target.value }))}
-          className="rounded-md border border-black/10 px-2 py-1 text-xs"
+          className={selectClass}
         >
           <option value="">All risk levels</option>
           {RISK_OPTIONS.map((r) => (
@@ -184,66 +191,93 @@ export default function AnalystDashboardPage() {
           value={filters.category}
           onChange={(e) => setFilters((f) => ({ ...f, category: e.target.value }))}
           placeholder="category (e.g. phishing)"
-          className="rounded-md border border-black/10 px-2 py-1 text-xs"
+          className={selectClass}
         />
       </div>
 
       {error && <p className="text-sm text-status-danger">{error}</p>}
-      {loading && <p className="text-sm text-chekkam-muted">Loading...</p>}
+      {loading && <p className="text-sm text-chekkam-muted">Loading…</p>}
 
       <div className="flex flex-col gap-3">
         {reports.map((report) => (
-          <div key={report.id} className="rounded-chekkam border border-black/5 bg-white p-4 shadow-sm">
+          <div
+            key={report.id}
+            className="rounded-[var(--radius-chekkam)] border border-chekkam-border bg-chekkam-surface-raised p-5 shadow-chekkam-sm"
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-[family-name:var(--font-data)] text-xs text-chekkam-faint">
+                    {report.id.slice(0, 8)}
+                  </span>
                   {report.risk_level && (
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${RISK_COLOR[report.risk_level] ?? "bg-status-neutral/10 text-status-neutral"}`}
+                      className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${RISK_COLOR[report.risk_level] ?? "bg-status-neutral/12 text-status-neutral"}`}
                     >
                       {report.risk_level}
                     </span>
                   )}
-                  <span className="rounded-full bg-chekkam-tint px-2 py-0.5 text-xs font-medium text-chekkam-primary">
+                  <span className="rounded-full bg-chekkam-tint px-2.5 py-0.5 text-xs font-medium text-chekkam-primary">
                     {report.channel}
                   </span>
-                  <span className="text-xs text-chekkam-muted">{report.category ?? "uncategorized"}</span>
-                  <span className="text-xs text-chekkam-muted">· {report.status}</span>
+                  <span className="text-xs text-chekkam-faint">{report.category ?? "uncategorized"}</span>
+                  <span className="text-xs text-chekkam-faint">· {report.status}</span>
+                  <span className="text-xs text-chekkam-faint">
+                    · {new Date(report.created_at).toLocaleDateString()}
+                  </span>
                   {report.confidence && (
-                    <span className="text-xs text-chekkam-muted">
-                      · confidence: {report.confidence} ({report.ai_indicators?.source ?? "n/a"})
+                    <span className="text-xs text-chekkam-faint">
+                      · {report.confidence} confidence ({report.ai_indicators?.source ?? "n/a"})
                     </span>
                   )}
                 </div>
                 <p className="mt-2 truncate text-sm text-chekkam-ink">
                   {report.raw_content ?? "(no text content)"}
                 </p>
+                {report.recommended_action && (
+                  <p className="mt-1 text-xs font-medium text-chekkam-ink">{report.recommended_action}</p>
+                )}
                 {report.ai_reasons && (
                   <ul className="mt-2 list-inside list-disc text-xs text-chekkam-muted">
-                    {report.ai_reasons.map((reason, i) => (
+                    {report.ai_reasons.slice(0, 3).map((reason, i) => (
                       <li key={i}>{reason}</li>
                     ))}
                   </ul>
                 )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
-                <select
-                  value={report.status}
-                  onChange={(e) => updateStatus(report.id, e.target.value)}
-                  className="rounded-md border border-black/10 px-2 py-1 text-xs"
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <button
+                    onClick={() => updateStatus(report.id, "under_review")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm hover:brightness-110"
+                  >
+                    Mark under review
+                  </button>
+                  <button
+                    onClick={() => updateStatus(report.id, "verified_threat")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-status-danger px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm hover:brightness-110"
+                  >
+                    Verify as threat
+                  </button>
+                  <button
+                    onClick={() => updateStatus(report.id, "false_report")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-chekkam-tint px-2.5 py-1 text-xs font-semibold text-chekkam-muted hover:bg-chekkam-border"
+                  >
+                    False report
+                  </button>
+                  <button
+                    onClick={() => updateStatus(report.id, "dismissed")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-chekkam-tint px-2.5 py-1 text-xs font-semibold text-chekkam-muted hover:bg-chekkam-border"
+                  >
+                    Dismiss
+                  </button>
+                </div>
                 <button
                   onClick={() => promoteToAlert(report)}
                   disabled={promoting === report.id}
-                  className="rounded-md bg-chekkam-primary px-2 py-1 text-xs font-semibold text-white disabled:opacity-60"
+                  className="rounded-[var(--radius-chekkam-sm)] bg-gradient-lagoon px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm disabled:opacity-60"
                 >
-                  {promoting === report.id ? "Promoting..." : "Promote to alert"}
+                  {promoting === report.id ? "Promoting…" : "Promote to alert"}
                 </button>
               </div>
             </div>
@@ -252,6 +286,28 @@ export default function AnalystDashboardPage() {
         {!loading && reports.length === 0 && (
           <p className="text-sm text-chekkam-muted">No reports match these filters.</p>
         )}
+      </div>
+    </div>
+  );
+}
+
+function StatTile({
+  label,
+  value,
+  accent,
+  danger,
+}: {
+  label: string;
+  value: number;
+  accent?: boolean;
+  danger?: boolean;
+}) {
+  const valueColor = danger ? "text-status-danger" : accent ? "text-chekkam-primary" : "text-chekkam-ink";
+  return (
+    <div className="rounded-[var(--radius-chekkam)] border border-chekkam-border bg-chekkam-surface-raised p-4 shadow-chekkam-sm">
+      <div className="text-xs font-medium uppercase tracking-wide text-chekkam-faint">{label}</div>
+      <div className={`mt-1.5 font-[family-name:var(--font-heading)] text-3xl font-semibold ${valueColor}`}>
+        {value}
       </div>
     </div>
   );

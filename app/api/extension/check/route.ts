@@ -79,7 +79,7 @@ export async function POST(req: NextRequest) {
       if (inserted) {
         const fingerprint = extractFingerprint(body.content);
         const reportId = inserted.id as string;
-        let campaignId = await matchCampaign(admin, fingerprint);
+        const campaignId = await matchCampaign(admin, fingerprint);
         if (campaignId) {
           await attachToCampaign(admin, campaignId, reportId);
         } else {

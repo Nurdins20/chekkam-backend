@@ -53,6 +53,7 @@ export default function SafetyAlertsAdminPage() {
   }, [supabase]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional fetch-on-mount
     load();
   }, [load]);
 
@@ -74,7 +75,10 @@ export default function SafetyAlertsAdminPage() {
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6">
       <div>
-        <h1 className="font-[family-name:var(--font-heading)] text-2xl font-bold text-chekkam-ink">
+        <div className="text-xs font-semibold uppercase tracking-wider text-chekkam-primary">
+          Human approval gate
+        </div>
+        <h1 className="mt-1 font-[family-name:var(--font-heading)] text-2xl font-semibold text-chekkam-ink">
           Safety alerts
         </h1>
         <p className="mt-1 text-sm text-chekkam-muted">
@@ -83,16 +87,19 @@ export default function SafetyAlertsAdminPage() {
       </div>
 
       {error && <p className="text-sm text-status-danger">{error}</p>}
-      {loading && <p className="text-sm text-chekkam-muted">Loading...</p>}
+      {loading && <p className="text-sm text-chekkam-muted">Loading…</p>}
 
       <div className="flex flex-col gap-3">
         {alerts.map((alert) => (
-          <div key={alert.id} className="rounded-chekkam border border-black/5 bg-white p-4 shadow-sm">
+          <div
+            key={alert.id}
+            className="rounded-[var(--radius-chekkam)] border border-chekkam-border bg-chekkam-surface-raised p-5 shadow-chekkam-sm"
+          >
             <div className="mb-2 flex items-center gap-2">
-              <span className="rounded-full bg-chekkam-tint px-2 py-0.5 text-xs font-medium text-chekkam-primary">
+              <span className="rounded-full bg-chekkam-tint px-2.5 py-0.5 text-xs font-medium text-chekkam-primary">
                 {alert.category}
               </span>
-              <span className="text-xs text-chekkam-muted">
+              <span className="text-xs text-chekkam-faint">
                 {alert.location_precision} · {alert.radius_meters}m radius
               </span>
             </div>
@@ -100,9 +107,9 @@ export default function SafetyAlertsAdminPage() {
             <button
               onClick={() => approve(alert.id)}
               disabled={busyId === alert.id}
-              className="mt-3 rounded-md bg-chekkam-primary px-3 py-1 text-xs font-semibold text-white disabled:opacity-60"
+              className="mt-3 rounded-[var(--radius-chekkam-sm)] bg-gradient-lagoon px-3.5 py-1.5 text-xs font-semibold text-white shadow-chekkam-sm disabled:opacity-60"
             >
-              {busyId === alert.id ? "Approving..." : "Approve & notify"}
+              {busyId === alert.id ? "Approving…" : "Approve & notify"}
             </button>
           </div>
         ))}

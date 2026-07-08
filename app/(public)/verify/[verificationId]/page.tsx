@@ -11,16 +11,40 @@ type VerifyResult = {
   reason?: string;
 };
 
-const STATUS_STYLE: Record<string, { label: string; className: string }> = {
-  genuine: { label: "Genuine", className: "bg-status-success/10 text-status-success border-status-success/30" },
-  tampered: { label: "Tampered", className: "bg-status-danger/10 text-status-danger border-status-danger/30" },
-  revoked: { label: "Revoked", className: "bg-status-neutral/10 text-status-neutral border-status-neutral/30" },
-  not_found: { label: "Not Found", className: "bg-status-neutral/10 text-status-neutral border-status-neutral/30" },
+const STATUS_STYLE: Record<
+  string,
+  { label: string; gradient: string; icon: string; guidance: string }
+> = {
+  genuine: {
+    label: "Genuine.",
+    gradient: "from-status-success to-emerald-800",
+    icon: "✓",
+    guidance: "Its signature matches the issuing institution's records and has not been revoked.",
+  },
+  tampered: {
+    label: "Tampered.",
+    gradient: "from-status-danger to-rose-900",
+    icon: "✕",
+    guidance: "The content does not match what was signed. Contact the issuing institution before relying on it.",
+  },
+  revoked: {
+    label: "Revoked.",
+    gradient: "from-status-neutral to-slate-700",
+    icon: "⦸",
+    guidance: "The issuing institution withdrew this document. See the reason below if provided.",
+  },
+  not_found: {
+    label: "Not found.",
+    gradient: "from-status-neutral to-slate-700",
+    icon: "?",
+    guidance: "Double-check the ID or PIN, or contact the issuing institution if you believe this is a mistake.",
+  },
 };
 
 /**
  * Public web verification fallback for people without the Flutter app
- * (FR-044, SRS 3.2). Mirrors the mobile app's manual-PIN-entry flow.
+ * (FR-044, SRS 3.2). Mirrors the mobile app's "seal moment" verify result —
+ * one focal badge, one verdict word, nothing else competing for attention.
  */
 export default function VerifyPage() {
   const params = useParams<{ verificationId: string }>();
@@ -51,36 +75,49 @@ export default function VerifyPage() {
   const style = result ? STATUS_STYLE[result.status] : null;
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-chekkam-tint-2 px-4 py-16">
-      <div className="w-full max-w-md rounded-chekkam border border-black/5 bg-white p-8 text-center shadow-sm">
-        <h1 className="font-[family-name:var(--font-heading)] text-xl font-bold text-chekkam-ink">
+    <div className="flex flex-1 items-center justify-center bg-chekkam-surface px-4 py-16">
+      <div className="w-full max-w-md rounded-[var(--radius-chekkam)] border border-chekkam-border bg-chekkam-surface-raised p-9 text-center shadow-chekkam-md">
+        <div className="text-xs font-semibold uppercase tracking-wider text-chekkam-primary">
           Document verification
-        </h1>
-        <p className="mt-1 break-all text-xs text-chekkam-muted">{params.verificationId}</p>
+        </div>
+        <p className="mt-2 break-all font-[family-name:var(--font-data)] text-xs text-chekkam-faint">
+          {params.verificationId}
+        </p>
 
-        {loading && <p className="mt-6 text-sm text-chekkam-muted">Checking...</p>}
-        {error && <p className="mt-6 text-sm text-status-danger">{error}</p>}
+        {loading && <p className="mt-8 text-sm text-chekkam-muted">Checking…</p>}
+        {error && <p className="mt-8 text-sm text-status-danger">{error}</p>}
 
         {result && style && (
-          <div className="mt-6">
-            <span className={`inline-block rounded-full border px-4 py-1 text-sm font-semibold ${style.className}`}>
+          <div className="mt-7">
+            <div
+              className={`mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-gradient-to-br ${style.gradient} text-4xl text-white shadow-chekkam-lg`}
+            >
+              {style.icon}
+            </div>
+            <h1 className="mt-5 font-[family-name:var(--font-heading)] text-3xl font-semibold text-chekkam-ink">
               {style.label}
-            </span>
+            </h1>
+            <p className="mx-auto mt-2 max-w-xs text-sm text-chekkam-muted">{style.guidance}</p>
+
             {result.institution && (
-              <p className="mt-4 text-sm text-chekkam-ink">
-                Issued by <span className="font-semibold">{result.institution}</span>
-                {result.document_type ? ` · ${result.document_type}` : ""}
-              </p>
-            )}
-            {result.reason && <p className="mt-2 text-sm text-chekkam-muted">Reason: {result.reason}</p>}
-            {result.status === "not_found" && (
-              <p className="mt-4 text-sm text-chekkam-muted">
-                No document matches this ID or PIN. Double check it, or contact the issuing institution.
-              </p>
+              <div className="mt-6 rounded-[var(--radius-chekkam-sm)] border border-chekkam-border bg-chekkam-tint p-4 text-left text-sm">
+                <Row label="Issued by" value={result.institution} />
+                {result.document_type && <Row label="Document type" value={result.document_type} />}
+                {result.reason && <Row label="Reason" value={result.reason} />}
+              </div>
             )}
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between gap-3 py-1">
+      <span className="text-chekkam-faint">{label}</span>
+      <span className="font-medium text-chekkam-ink">{value}</span>
     </div>
   );
 }
