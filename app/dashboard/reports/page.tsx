@@ -43,7 +43,7 @@ const selectClass =
   "rounded-[var(--radius-chekkam-sm)] border border-chekkam-border bg-chekkam-tint px-2.5 py-1.5 text-xs text-chekkam-ink outline-none focus:border-chekkam-primary";
 
 /** Analyst review queue (SRS FR-081-083; Phase 2 §7.1-7.2). Human review before publish, in one screen. */
-export default function AnalystDashboardPage() {
+export default function ReportsDashboardPage() {
   const supabase = getSupabaseBrowser();
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -123,7 +123,7 @@ export default function AnalystDashboardPage() {
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body?.error?.message ?? "Failed to promote this report.");
-      window.location.href = `/dashboard/analyst/alerts?highlight=${body.id}`;
+      window.location.href = `/dashboard/alerts?highlight=${body.id}`;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -207,6 +207,9 @@ export default function AnalystDashboardPage() {
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-[family-name:var(--font-data)] text-xs text-chekkam-faint">
+                    {report.id.slice(0, 8)}
+                  </span>
                   {report.risk_level && (
                     <span
                       className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${RISK_COLOR[report.risk_level] ?? "bg-status-neutral/12 text-status-neutral"}`}
@@ -219,39 +222,60 @@ export default function AnalystDashboardPage() {
                   </span>
                   <span className="text-xs text-chekkam-faint">{report.category ?? "uncategorized"}</span>
                   <span className="text-xs text-chekkam-faint">· {report.status}</span>
+                  <span className="text-xs text-chekkam-faint">
+                    · {new Date(report.created_at).toLocaleDateString()}
+                  </span>
                   {report.confidence && (
                     <span className="text-xs text-chekkam-faint">
-                      · confidence: {report.confidence} ({report.ai_indicators?.source ?? "n/a"})
+                      · {report.confidence} confidence ({report.ai_indicators?.source ?? "n/a"})
                     </span>
                   )}
                 </div>
                 <p className="mt-2 truncate text-sm text-chekkam-ink">
                   {report.raw_content ?? "(no text content)"}
                 </p>
+                {report.recommended_action && (
+                  <p className="mt-1 text-xs font-medium text-chekkam-ink">{report.recommended_action}</p>
+                )}
                 {report.ai_reasons && (
                   <ul className="mt-2 list-inside list-disc text-xs text-chekkam-muted">
-                    {report.ai_reasons.map((reason, i) => (
+                    {report.ai_reasons.slice(0, 3).map((reason, i) => (
                       <li key={i}>{reason}</li>
                     ))}
                   </ul>
                 )}
               </div>
               <div className="flex shrink-0 flex-col items-end gap-2">
-                <select
-                  value={report.status}
-                  onChange={(e) => updateStatus(report.id, e.target.value)}
-                  className={selectClass}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  <button
+                    onClick={() => updateStatus(report.id, "under_review")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-blue-600 px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm hover:brightness-110"
+                  >
+                    Mark under review
+                  </button>
+                  <button
+                    onClick={() => updateStatus(report.id, "verified_threat")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-status-danger px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm hover:brightness-110"
+                  >
+                    Verify as threat
+                  </button>
+                  <button
+                    onClick={() => updateStatus(report.id, "false_report")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-chekkam-tint px-2.5 py-1 text-xs font-semibold text-chekkam-muted hover:bg-chekkam-border"
+                  >
+                    False report
+                  </button>
+                  <button
+                    onClick={() => updateStatus(report.id, "dismissed")}
+                    className="rounded-[var(--radius-chekkam-sm)] bg-chekkam-tint px-2.5 py-1 text-xs font-semibold text-chekkam-muted hover:bg-chekkam-border"
+                  >
+                    Dismiss
+                  </button>
+                </div>
                 <button
                   onClick={() => promoteToAlert(report)}
                   disabled={promoting === report.id}
-                  className="rounded-[var(--radius-chekkam-sm)] bg-chekkam-primary px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm disabled:opacity-60"
+                  className="rounded-[var(--radius-chekkam-sm)] bg-gradient-lagoon px-2.5 py-1 text-xs font-semibold text-white shadow-chekkam-sm disabled:opacity-60"
                 >
                   {promoting === report.id ? "Promoting…" : "Promote to alert"}
                 </button>

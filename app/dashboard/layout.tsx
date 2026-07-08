@@ -1,22 +1,42 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useSession } from "@/lib/hooks/useSession";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 const NAV_ITEMS = [
-  { href: "/dashboard/analyst", label: "Reports" },
-  { href: "/dashboard/analyst/alerts", label: "Public alerts" },
-  { href: "/dashboard/analyst/safety-alerts", label: "Safety alerts" },
-  { href: "/dashboard/institution", label: "Institution" },
+  { href: "/dashboard/reports", label: "Reports" },
+  { href: "/dashboard/documents", label: "Documents" },
+  { href: "/dashboard/alerts", label: "Public alerts" },
+  { href: "/dashboard/safety-alerts", label: "Safety alerts" },
 ];
+
+const ROLE_LABEL: Record<string, string> = {
+  citizen: "Citizen",
+  institution_officer: "Institution officer",
+  analyst: "Analyst",
+  admin: "Admin",
+  super_admin: "Super admin",
+};
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { session, loading, configured } = useSession();
   const router = useRouter();
   const pathname = usePathname();
   const supabase = getSupabaseBrowser();
+  const [role, setRole] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!supabase || !session) return;
+    supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", session.user.id)
+      .single()
+      .then(({ data }) => setRole(data?.role ?? null));
+  }, [supabase, session]);
 
   if (!configured) {
     return (
@@ -74,15 +94,21 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
             );
           })}
         </nav>
-        <button
-          onClick={async () => {
-            await supabase?.auth.signOut();
-            router.push("/login");
-          }}
-          className="rounded-[var(--radius-chekkam-sm)] px-3 py-2 text-left text-sm font-medium text-white/50 transition hover:bg-white/8 hover:text-white/80"
-        >
-          Sign out
-        </button>
+        <div className="border-t border-white/10 pt-3">
+          <div className="px-3 py-1 text-xs text-white/50">
+            {session.user.email}
+            {role && <div className="mt-0.5 font-medium text-white/75">{ROLE_LABEL[role] ?? role}</div>}
+          </div>
+          <button
+            onClick={async () => {
+              await supabase?.auth.signOut();
+              router.push("/login");
+            }}
+            className="mt-1 w-full rounded-[var(--radius-chekkam-sm)] px-3 py-2 text-left text-sm font-medium text-white/50 transition hover:bg-white/8 hover:text-white/80"
+          >
+            Sign out
+          </button>
+        </div>
       </aside>
       <main className="flex-1 overflow-y-auto bg-chekkam-surface p-8">{children}</main>
     </div>
