@@ -3,7 +3,7 @@ import { getSupabaseAdmin } from "@/lib/supabase/admin";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { ValidationError, toErrorResponse } from "@/lib/errors";
 import { pickLang, tt } from "@/lib/i18n";
-import { verifyByUpload, VerifierChannel } from "@/lib/documents/verify";
+import { verifyByUpload, verifierChannelFrom } from "@/lib/documents/verify";
 
 const RATE_LIMIT = 30;
 const RATE_WINDOW_SECONDS = 10 * 60;
@@ -40,7 +40,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const form = await req.formData();
+    let form: FormData;
+    try {
+      form = await req.formData();
+    } catch {
+      throw new ValidationError(tt("fileRequired", preferredLang), "file");
+    }
     preferredLang = pickLang(
       (form.get("language") as string | null) ?? req.nextUrl.searchParams.get("lang"),
       req.headers.get("accept-language")
@@ -50,7 +55,7 @@ export async function POST(req: NextRequest) {
       throw new ValidationError(tt("fileRequired", preferredLang), "file");
     }
     const verificationIdField = form.get("verification_id");
-    const channel = (form.get("channel") as VerifierChannel) || "web";
+    const channel = verifierChannelFrom(form.get("channel") as string | null);
 
     const buffer = Buffer.from(await file.arrayBuffer());
     const admin = getSupabaseAdmin();

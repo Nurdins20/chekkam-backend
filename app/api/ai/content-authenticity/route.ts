@@ -63,7 +63,12 @@ export async function POST(req: NextRequest) {
     let evidenceId: string | null = null;
 
     if (contentType.includes("multipart/form-data")) {
-      const form = await req.formData();
+      let form: FormData;
+      try {
+        form = await req.formData();
+      } catch {
+        throw new ValidationError("file is required (multipart/form-data).", "file");
+      }
       const file = form.get("file");
       const kind = form.get("kind");
       if (!(file instanceof File)) {
@@ -91,7 +96,7 @@ export async function POST(req: NextRequest) {
 
         const { data: evidence } = await admin
           .from("evidence")
-          .insert({ file_hash: hashDocument(buffer), file_type: mime, status: "done" })
+          .insert({ file_hash: hashDocument(buffer), file_type: mime })
           .select("id")
           .single();
         evidenceId = evidence?.id ?? null;
