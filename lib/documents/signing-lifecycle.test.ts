@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { verifySignature } from "@/lib/crypto/verify";
-import { generateSigningKeyPair, hashDocument } from "@/lib/crypto/sign";
+import { generateSigningKeyPair, hashDocument, normalizePublicKeyPem } from "@/lib/crypto/sign";
 import { signDocumentCore } from "@/lib/documents/sign-document";
 import { verifyByUpload } from "@/lib/documents/verify";
 
@@ -47,10 +47,22 @@ describe("signed document verification lifecycle", () => {
         error: null,
       })),
     };
+    const institutionBuilder: Record<string, unknown> = {
+      select: vi.fn(() => institutionBuilder),
+      eq: vi.fn(() => institutionBuilder),
+      maybeSingle: vi.fn(async () => ({ data: { signing_public_key: publicKey }, error: null })),
+    };
+    const keyHistoryBuilder = {
+      upsert: vi.fn(async () => ({ data: null, error: null })),
+    };
     const signingAdmin = {
       from: vi.fn((table: string) =>
         table === "documents"
           ? documentsBuilder
+          : table === "institutions"
+            ? institutionBuilder
+            : table === "institution_signing_keys"
+              ? keyHistoryBuilder
           : { insert: vi.fn(async () => ({ data: null, error: null })) }
       ),
     };
@@ -67,22 +79,27 @@ describe("signed document verification lifecycle", () => {
     expect(signed.qr_payload).toContain(`/verify/${signed.verification_id}`);
     expect(signed.qr_image).toMatch(/^data:image\/png/);
     expect(inserted).not.toBeNull();
+    // The mock callback mutates this value asynchronously; make that fact
+    // explicit for TypeScript's control-flow analysis.
+    const insertedPayload = inserted as Record<string, unknown> | null;
     expect(
       verifySignature(
         hashDocument(original),
-        inserted?.signature as string,
+        insertedPayload?.signature as string,
         publicKey
       )
     ).toBe(true);
+    expect(insertedPayload?.signing_public_key_snapshot).toBe(normalizePublicKeyPem(publicKey));
 
     const baseDocument = {
       id: "doc-1",
       verification_id: signed.verification_id,
-      file_hash: inserted?.file_hash,
-      signature: inserted?.signature,
+      file_hash: insertedPayload?.file_hash,
+      signature: insertedPayload?.signature,
       document_type: "scholarship",
       recipient_name: "Ada Example",
       expiry_date: null,
+      signing_public_key_snapshot: publicKey,
       institutions: { name: "Example University", verified: true, signing_public_key: publicKey },
     };
 

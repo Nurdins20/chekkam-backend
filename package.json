@@ -12,6 +12,7 @@
     "db:migrate": "node scripts/migrate.mjs",
     "db:seed": "tsx scripts/seed.ts",
     "seed:demo-trust": "tsx scripts/seed-demo-trust.ts",
+    "rotate-signing-key": "tsx scripts/rotate-institution-signing-key.ts",
     "test": "vitest run",
     "lint": "eslint",
     "generate-signing-key": "node scripts/generate-signing-key.mjs",
