@@ -99,7 +99,20 @@ async function upsertProfile(userId: string, role: string, displayName: string) 
 
 async function ensureInstitution(): Promise<string> {
   const envVarName = envVarNameFor(INSTITUTION_ID);
-  const configuredPublicKey = configuredDemoInstitutionPublicKey();
+  // This runs on every production boot (npm start -> db:seed -> next start),
+  // chained with `&&` — an uncaught error here previously took the whole app
+  // down before it ever started listening. Deriving the public key can throw
+  // (missing/malformed signing key env var), so it must never be allowed to
+  // block startup for an institution that already exists and needs no sync.
+  let configuredPublicKey: string | null = null;
+  try {
+    configuredPublicKey = configuredDemoInstitutionPublicKey();
+  } catch (err) {
+    log(
+      `Warning: could not derive the demo institution's public key from ${envVarName} (${(err as Error).message}). Skipping the public-key sync check this run.`
+    );
+  }
+
   const { data: existing } = await supabase
     .from("institutions")
     .select("id, signing_public_key")
@@ -107,19 +120,27 @@ async function ensureInstitution(): Promise<string> {
     .maybeSingle();
 
   if (existing) {
-    const storedPublicKey = (existing.signing_public_key ?? "")
-      .replace(/\r\n/g, "\n")
-      .trim();
-    if (storedPublicKey !== configuredPublicKey) {
-      const { error } = await supabase
-        .from("institutions")
-        .update({ signing_public_key: configuredPublicKey, signing_key_ref: envVarName })
-        .eq("id", INSTITUTION_ID);
-      if (error) throw error;
-      log("Synchronized the demo institution public signing key with its configured signing key.");
+    if (configuredPublicKey) {
+      const storedPublicKey = (existing.signing_public_key ?? "")
+        .replace(/\r\n/g, "\n")
+        .trim();
+      if (storedPublicKey !== configuredPublicKey) {
+        const { error } = await supabase
+          .from("institutions")
+          .update({ signing_public_key: configuredPublicKey, signing_key_ref: envVarName })
+          .eq("id", INSTITUTION_ID);
+        if (error) throw error;
+        log("Synchronized the demo institution public signing key with its configured signing key.");
+      }
     }
     log(`Institution "${INSTITUTION_NAME}" already exists (id: ${INSTITUTION_ID})`);
     return INSTITUTION_ID;
+  }
+
+  if (!configuredPublicKey) {
+    throw new Error(
+      `Cannot create the demo institution without a signing key. Set ${envVarName} in your environment.`
+    );
   }
 
   const { error } = await supabase.from("institutions").insert({
