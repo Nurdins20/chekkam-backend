@@ -25,6 +25,7 @@ import { generateSigningKeyPair, getInstitutionPrivateKey } from "../lib/crypto/
 import { generateVerificationId, generatePinCode } from "../lib/crypto/ids";
 import { buildVerificationUrl } from "../lib/crypto/qrcode";
 import { bufferToBytea } from "../lib/documents/bytea";
+import { embedInvisibleMarker } from "../lib/documents/embed";
 import { generateDemoCertificatePdf, demoCertificateFilename } from "../lib/documents/demo/certificate-template";
 
 loadEnv();
@@ -342,7 +343,7 @@ async function upsertDemoTrustAsset(key: string, bytes: Uint8Array, mimeType: st
  * findable/printed text (proving hash-mismatch tamper detection, not a
  * missing-record false negative). */
 async function ensureTamperedAsset(genuine: SignedDemoDoc) {
-  const bytes = await generateDemoCertificatePdf({
+  const generatedBytes = await generateDemoCertificatePdf({
     title: "Certificate of Completion",
     recipientName: "Janet Demo Nfor", // the one changed value
     programme: "Cybersecurity and Digital Trust Fundamentals",
@@ -356,6 +357,15 @@ async function ensureTamperedAsset(genuine: SignedDemoDoc) {
     qrPayload: genuine.qr_payload,
     isTestCopy: true,
   });
+  // Preserve the real document's invisible identifier in this altered copy.
+  // The altered bytes therefore resolve the original registry record, whose
+  // signed hash differs, exercising the genuine tamper-detection path.
+  const embedded = await embedInvisibleMarker(
+    Buffer.from(generatedBytes),
+    `Chekkam:${genuine.verification_id}`
+  );
+  if (!embedded) throw new Error("Could not embed the tampered demo PDF marker");
+  const bytes = embedded.buffer;
   const filename = demoCertificateFilename(genuine.verification_id, "TAMPERED");
   await upsertDemoTrustAsset("tampered", bytes, "application/pdf", filename);
   log(`Generated TAMPERED demo asset (${filename}) — recipient name changed after the fact, never re-signed or re-registered.`);
