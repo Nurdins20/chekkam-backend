@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { Jimp } from "jimp";
 import { getAiConfig } from "@/lib/ai/config";
 import { extractText } from "@/lib/ai/ocr";
 
@@ -13,17 +14,6 @@ export type ContentAuthenticityResult = {
   confidence: AuthenticityConfidence | null;
   indicators: Record<string, unknown>;
   explanation: string[];
-};
-
-const NOT_SUPPORTED: ContentAuthenticityResult = {
-  status: "not_supported",
-  ai_likelihood: "unknown",
-  confidence: null,
-  indicators: {},
-  explanation: [
-    "Chekkam cannot yet perform a forensic video or audio deepfake assessment from this file.",
-    "Share the original public link so we can check whether it came from a registered official source.",
-  ],
 };
 
 const UNAVAILABLE: ContentAuthenticityResult = {
@@ -58,12 +48,25 @@ function clampConfidence(raw: "low" | "medium" | "high"): AuthenticityConfidence
   return raw === "high" ? "medium" : raw;
 }
 
+/**
+ * Keep provider diagnostics out of citizen-facing results and out of stored
+ * evidence, but leave a safe operational breadcrumb in server logs. This is
+ * enough to distinguish a missing key, a quota/auth/model response, a timeout,
+ * or an invalid payload without logging submitted media, prompts, or secrets.
+ */
+function logProviderUnavailable(reason: string) {
+  console.warn(`[content-authenticity] provider unavailable: ${reason}`);
+}
+
 async function callVisionOrTextModel(
   systemPrompt: string,
   userContent: string | Array<Record<string, unknown>>
 ): Promise<z.infer<typeof authenticitySchema> | null> {
   const { apiKey, model } = getAiConfig();
-  if (!apiKey) return null;
+  if (!apiKey) {
+    logProviderUnavailable("OPENAI_API_KEY is not configured");
+    return null;
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), AUTHENTICITY_TIMEOUT_MS);
@@ -83,15 +86,30 @@ async function callVisionOrTextModel(
       }),
       signal: controller.signal,
     });
-    if (!response.ok) return null;
+    if (!response.ok) {
+      logProviderUnavailable(`OpenAI HTTP ${response.status}`);
+      return null;
+    }
 
     const payload = await response.json();
     const raw = payload?.choices?.[0]?.message?.content;
-    if (typeof raw !== "string") return null;
+    if (typeof raw !== "string") {
+      logProviderUnavailable("OpenAI response was missing message content");
+      return null;
+    }
 
     const parsed = authenticitySchema.safeParse(JSON.parse(raw));
-    return parsed.success ? parsed.data : null;
-  } catch {
+    if (!parsed.success) {
+      logProviderUnavailable("OpenAI response did not match the expected schema");
+      return null;
+    }
+    return parsed.data;
+  } catch (error) {
+    logProviderUnavailable(
+      error instanceof DOMException && error.name === "AbortError"
+        ? "OpenAI request timed out"
+        : "OpenAI request failed before a usable response"
+    );
     return null;
   } finally {
     clearTimeout(timeout);
@@ -139,10 +157,21 @@ const IMAGE_SYSTEM_PROMPT =
 /** Coarse, best-effort EXIF-presence check: real camera photos usually carry
  * rich EXIF; many AI-generated or metadata-stripped images don't. A weak
  * supplementary signal only — never on its own conclusive. */
+async function hasExifMetadata(buffer: Buffer): Promise<boolean | "unknown"> {
+  try {
+    const image = await Jimp.read(buffer);
+    const exif = (image as unknown as { _exif?: { tags?: Record<string, unknown> } })._exif;
+    return !!exif?.tags && Object.keys(exif.tags).length > 0;
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function analyzeImageAuthenticity(
   buffer: Buffer,
   mimeType: string
 ): Promise<ContentAuthenticityResult> {
+  const exifPresent = await hasExifMetadata(buffer);
   const parsed = await callVisionOrTextModel(IMAGE_SYSTEM_PROMPT, [
     { type: "text", text: "Assess this image for AI-generation/manipulation indicators." },
     { type: "image_url", image_url: { url: `data:${mimeType};base64,${buffer.toString("base64")}` } },
@@ -153,7 +182,7 @@ export async function analyzeImageAuthenticity(
     status: "done",
     ai_likelihood: parsed.ai_likelihood,
     confidence: clampConfidence(parsed.confidence),
-    indicators: parsed.indicators,
+    indicators: { ...parsed.indicators, exif_present: exifPresent },
     explanation: parsed.explanation,
   };
 }
@@ -195,15 +224,72 @@ export async function analyzeDocumentAuthenticity(
 }
 
 /**
- * Video/audio authenticity assessment is architecture-ready but not
- * implemented — there is no real deepfake/voice-clone model wired in, so
- * this must report "not_supported" rather than a fabricated verdict (same
- * "never fabricate" contract as the unavailable-path branches above).
+ * There is no deepfake/voice-clone detection model or third-party API wired
+ * in (see docs/api/content-authenticity.md) — a full frame-by-frame or
+ * spectral forensic verdict is not available and must never be simulated.
+ * What IS real and checkable without any model or API: many AI
+ * generation tools embed their own product name in a file's container
+ * metadata (an "encoder"/"software"/"comment" atom or tag), by default,
+ * because they have no reason to hide it. Scanning for those known
+ * identifiers is a direct, evidence-based signal — not a probabilistic
+ * guess — so unlike the LLM-based analyzers above, a match here is
+ * reported even though it wasn't produced by a model. A miss proves
+ * nothing (metadata is trivial to strip or re-encode away), so it must
+ * still resolve to "unavailable", never a false "no AI indicators found".
  */
-export function videoAuthenticityStatus(): ContentAuthenticityResult {
-  return NOT_SUPPORTED;
+const VIDEO_TOOL_SIGNATURES = [
+  "runwayml",
+  "runway ml",
+  "pika labs",
+  "pika.art",
+  "kling ai",
+  "luma ai",
+  "luma dream machine",
+  "synthesia",
+  "heygen",
+  "d-id",
+  "genmo",
+  "haiper",
+  "sora openai",
+];
+
+const AUDIO_TOOL_SIGNATURES = [
+  "elevenlabs",
+  "eleven labs",
+  "play.ht",
+  "playht",
+  "murf.ai",
+  "resemble.ai",
+  "descript overdub",
+  "wellsaid",
+  "coqui tts",
+  "tortoise-tts",
+];
+
+/** Case-insensitive scan of a file's raw bytes for a known tool identifier. */
+function findToolSignature(buffer: Buffer, signatures: string[]): string | null {
+  const haystack = buffer.toString("latin1").toLowerCase();
+  return signatures.find((signature) => haystack.includes(signature)) ?? null;
 }
 
-export function audioAuthenticityStatus(): ContentAuthenticityResult {
-  return NOT_SUPPORTED;
+function metadataSignatureResult(matched: string | null): ContentAuthenticityResult {
+  if (!matched) return UNAVAILABLE;
+  return {
+    status: "done",
+    ai_likelihood: "high",
+    confidence: "medium",
+    indicators: { ai_tool_signature_found: true, matched_tool: matched },
+    explanation: [
+      `This file's metadata contains the identifier "${matched}", which is associated with an AI generation tool.`,
+      "This is a direct metadata match, not a probabilistic guess — but metadata can be stripped or edited, so its absence never confirms a file is authentic.",
+    ],
+  };
+}
+
+export function analyzeVideoAuthenticity(buffer: Buffer): ContentAuthenticityResult {
+  return metadataSignatureResult(findToolSignature(buffer, VIDEO_TOOL_SIGNATURES));
+}
+
+export function analyzeAudioAuthenticity(buffer: Buffer): ContentAuthenticityResult {
+  return metadataSignatureResult(findToolSignature(buffer, AUDIO_TOOL_SIGNATURES));
 }

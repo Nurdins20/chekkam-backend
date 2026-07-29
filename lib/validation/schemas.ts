@@ -2,7 +2,7 @@ import { z } from "zod";
 
 export const reportCreateSchema = z
   .object({
-    content_type: z.enum(["text", "link", "image", "file"]),
+    content_type: z.enum(["text", "link", "image", "file", "video", "audio"]),
     raw_content: z.string().min(1).optional(),
     file_url: z.string().url().optional(),
     channel: z
@@ -15,6 +15,14 @@ export const reportCreateSchema = z
     lng: z.number().min(-180).max(180).optional(),
     /** Links a prior POST /api/ocr/upload result to this report (evidence.report_id). */
     evidence_id: z.string().uuid().optional(),
+    /** Structured mobile-money fields (Phase 12) — optional on every report,
+     * not just mobile-money ones. Seeded into the fingerprint alongside
+     * whatever's auto-extracted from raw_content (lib/campaigns/fingerprint.ts). */
+    phone_number: z.string().max(32).optional(),
+    wallet_number: z.string().max(32).optional(),
+    merchant_name: z.string().max(200).optional(),
+    transaction_reference: z.string().max(100).optional(),
+    network_provider: z.enum(["mtn", "orange", "express_union", "other"]).optional(),
   })
   .refine(
     (data) =>
@@ -28,10 +36,13 @@ export const reportCreateSchema = z
   )
   .refine(
     (data) =>
-      data.content_type === "image" || data.content_type === "file"
+      ["image", "file", "video", "audio"].includes(data.content_type)
         ? !!data.file_url
         : true,
-    { message: "file_url is required for content_type=image or file", path: ["file_url"] }
+    {
+      message: "file_url is required for content_type=image, file, video, or audio",
+      path: ["file_url"],
+    }
   );
 
 export const reportUpdateSchema = z.object({
@@ -42,6 +53,7 @@ export const reportUpdateSchema = z.object({
     "verified_threat",
     "false_report",
     "dismissed",
+    "resolved",
   ]),
 });
 
